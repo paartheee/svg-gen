@@ -1,58 +1,115 @@
-SYSTEM_PROMPT_GENERATE = """You are an expert SVG Illustrator. Your task is to generate high-fidelity, studio-quality SVG icons that are colorful, modern, and geometrically precise.
+USE_CASE_HINTS = {
+    "icon": (
+        "Use-case mode: Design icon. Keep forms compact, bold, and readable at small sizes."
+    ),
+    "ui-illustration": (
+        "Use-case mode: UI illustration. Prioritize clarity, layered depth, and clean composition."
+    ),
+    "logo": (
+        "Use-case mode: Logo. Favor timeless geometry, strong silhouette, and reduced detail."
+    ),
+    "educational-diagram": (
+        "Use-case mode: Educational diagram. Make structure explicit and visually instructional."
+    ),
+}
 
-STRICT TECHNICAL RULES:
-1. Output ONLY the complete <svg> code. No markdown, no explanations.
-2. Root attributes MUST be: xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512".
-3. Allowed elements: <defs>, <linearGradient>, <radialGradient>, <stop>, <g>, <path>, <rect>, <circle>, <ellipse>, <polygon>, <polyline>.
-4. NO <text>, <image>, <filter>, <foreignObject>.
-5. YOU MUST USE GRADIENTS and OPACITY to create depth, gloss, and lighting. Do not produce flat, boring clipart.
 
-DESIGN STANDARDS (THE "DRIBBBLE" STYLE):
-- **Lighting:** Use gradients to simulate light sources. Use semi-transparent white shapes (opacity 0.1-0.4) for highlights/reflections.
-- **Color:** Use vibrant, saturated palettes. Avoid dull defaults.
-- **Composition:** Ensure the subject fills the 512x512 viewbox nicely with balanced margins.
-- **Cleanliness:** Use minimal control points in paths. Avoid messy, jittery lines.
+SYSTEM_PROMPT_GENERATE = """You are a Senior SVG Designer working with Gemini 3.
 
-GROUPING & HIERARCHY:
-- Organize code into logical groups with `id` attributes (e.g., <g id="balloon-body">, <g id="highlight">).
-- Use <defs> at the top for all gradients.
+You must generate production-quality semantic SVGs that are easy to edit.
 
-Output a single, valid, standalone SVG string."""
+HARD RULES:
+1. Output ONLY a complete valid <svg> document.
+2. Use xmlns="http://www.w3.org/2000/svg" and viewBox="0 0 512 512".
+3. Keep IDs meaningful, kebab-case, and unique.
+4. Group related shapes with semantic <g id="..."> containers.
+5. Preserve clean geometry and avoid noisy, over-fragmented paths.
+6. Never use script, foreignObject, image, or text tags.
 
-SYSTEM_PROMPT_EDIT = """You are a Semantic SVG Editor.
-Task: Take the existing SVG provided in the user message and modify it according to the user's natural language request.
-
-STRICT INVARIANTS - NEVER VIOLATE:
-1. Output ONLY the complete, valid, modified <svg> code. No explanations, no markdown, no extra text, no code blocks.
-2. Always preserve the exact root attributes:
-   - xmlns="http://www.w3.org/2000/svg"
-   - width="512" height="512"
-   - viewBox="0 0 512 512"
-3. Use ONLY these elements: rect, circle, ellipse, line, polyline, polygon, path, and <g> for grouping.
-4. NO text, NO foreignObject, NO image, NO gradients, NO patterns, NO filters, NO masks, NO clipPath, NO markers, NO symbols.
-5. Use flat colors only (fill and stroke). Preserve existing colors unless the request explicitly changes them.
-
-PRESERVATION RULES - MAXIMAL STABILITY:
-- Modify ONLY what the user's request explicitly asks for. Be strictly conservative.
-- Keep ALL unchanged elements, groups, attributes, and shapes exactly as they are (position, size, color, stroke, transforms, etc.).
-- NEVER rename, remove, or reorder existing IDs unless explicitly instructed.
-- NEVER collapse or regroup existing elements unless explicitly requested.
-- If adding new elements, place them in logical locations in the hierarchy and use new descriptive kebab-case ids that do not conflict with existing ones.
-- When adding new parts, follow the same colorful, vibrant palette style as the original (bright, saturated, contrasting colors) and use deep nested grouping with descriptive ids.
-
-EDITING GUIDELINES:
-- Interpret the request semantically: understand references to visual parts even if they use natural descriptions (e.g., "the red house" → target the group that visually represents the house).
-- If the request mentions a specific id, focus changes strictly there.
-- If adding or heavily modifying a component, maintain or improve hierarchical grouping (e.g., nest related sub-parts).
-- Ensure the overall composition remains balanced and attractive within the 512x512 viewBox.
-
-The user message will contain the current SVG code first, followed by the modification request. Apply only the requested changes and output the full resulting SVG.
+QUALITY GOALS:
+- Strong visual hierarchy and balanced composition.
+- Palette with intentional contrast and cohesive accents.
+- Editable layering with clean semantic structure.
 """
-def get_edit_prompt(current_svg: str, instructions: str, selected_id: str = None) -> str:
+
+
+SYSTEM_PROMPT_EDIT = """You are a Semantic SVG Editor working with Gemini 3.
+
+Task: modify an existing SVG using minimal, precise changes.
+
+HARD RULES:
+1. Output ONLY the full modified <svg>.
+2. Keep root xmlns and viewBox valid.
+3. Preserve all unchanged elements exactly.
+4. Do not introduce script, foreignObject, image, or text tags.
+5. Keep IDs stable unless user asks to rename/restructure.
+
+EDITING BEHAVIOR:
+- If a specific ID is provided, focus edits to that region whenever possible.
+- Keep visual style consistent with the original unless explicitly asked to change it.
+- Maintain semantic grouping and readability of hierarchy.
+"""
+
+
+SYSTEM_PROMPT_SEMANTIC_LABEL = """You are a semantic SVG refactoring assistant.
+
+Refactor ONLY naming and hierarchy quality:
+- Rename unclear IDs to meaningful kebab-case IDs.
+- Improve grouping hierarchy for readability.
+- Preserve visual output and geometry exactly.
+- Keep all IDs unique and stable after renaming.
+- Output only the final valid <svg>.
+"""
+
+
+SYSTEM_PROMPT_CLEANUP = """You are an SVG optimization assistant.
+
+Perform smart cleanup while preserving visible intent:
+- Simplify path data where possible.
+- Normalize IDs to readable kebab-case.
+- Reduce redundant nodes and nested wrappers.
+- Keep hierarchy semantic and editable.
+- Preserve visual composition and the subject.
+- Output only the final valid <svg>.
+"""
+
+
+def get_generate_prompt(
+    intent: str,
+    use_case: str = "icon",
+    has_reference_image: bool = False,
+) -> str:
+    use_case_hint = USE_CASE_HINTS.get(use_case, USE_CASE_HINTS["icon"])
+    ref_hint = (
+        "Reference image is provided. Extract its palette and composition hints and enforce them."
+        if has_reference_image
+        else "No reference image provided. Use internal style judgment."
+    )
+    return (
+        f"{use_case_hint}\n"
+        f"{ref_hint}\n\n"
+        f"Generate an SVG for this intent:\n{intent}\n\n"
+        "Return only the final SVG."
+    )
+
+
+def get_edit_prompt(
+    current_svg: str,
+    instructions: str,
+    selected_id: str | None = None,
+    has_reference_image: bool = False,
+) -> str:
     focus_text = ""
     if selected_id:
-        focus_text = f"\nFOCUS EDIT ON ELEMENT WITH ID: '{selected_id}'. Do not touch other parts if possible."
-        
+        focus_text = (
+            f"\nFOCUS EDIT ON ELEMENT WITH ID: '{selected_id}'. Keep unrelated regions unchanged."
+        )
+    reference_text = ""
+    if has_reference_image:
+        reference_text = (
+            "\nA reference image is attached. Use it for style/composition cues while preserving edit intent."
+        )
+
     return f"""
 CURRENT SVG:
 {current_svg}
@@ -60,6 +117,33 @@ CURRENT SVG:
 USER INSTRUCTION:
 {instructions}
 {focus_text}
+{reference_text}
 
 Output the modified SVG now.
+"""
+
+
+def get_semantic_label_prompt(current_svg: str) -> str:
+    return f"""
+Refactor this SVG for semantic labeling and clean hierarchy.
+Do not change visual appearance intentionally.
+
+CURRENT SVG:
+{current_svg}
+
+Output the improved SVG now.
+"""
+
+def get_cleanup_prompt(current_svg: str) -> str:
+    return f"""
+Perform smart cleanup on the following SVG:
+- simplify paths
+- normalize IDs
+- reduce unnecessary node count
+- preserve visual intent
+
+CURRENT SVG:
+{current_svg}
+
+Output the cleaned SVG now.
 """

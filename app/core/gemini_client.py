@@ -33,8 +33,8 @@ async def call_gemini(
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 thinking_config=types.ThinkingConfig(thinking_level="low"),
-                temperature=0.3,
-                top_p=0.9,
+                temperature=0.1, 
+                top_p=0.95,
                 top_k=40,
             )
         )

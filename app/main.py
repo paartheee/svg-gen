@@ -16,7 +16,7 @@ app.add_middleware(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "model_config": {"flash": settings.GEMINI_FLASH_MODEL, "pro": settings.GEMINI_PRO_MODEL}}
+    return {"status": "ok", "model_config": {"pro": settings.GEMINI_PRO_MODEL}}
 
 app.include_router(generate.router, prefix="/api", tags=["generate"])
 app.include_router(edit.router, prefix="/api", tags=["edit"])

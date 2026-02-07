@@ -19,8 +19,8 @@ def validate_svg(svg_content: str) -> tuple[bool, str]:
     """
     Validates SVG against strict invariants:
     1. Valid XML
-    2. No invalid tags (script, foreignObject, image, filter, text)
-    3. No gradients (linearGradient, radialGradient) - unless we decide to allow them, but invariants said NO.
+    2. No dangerous/unsupported tags (script, foreignObject, image, text)
+    3. Gradients (linearGradient, radialGradient, stop, defs) are now ALLOWED for high-quality rendering
     """
     try:
         # 1. Valid XML
@@ -34,8 +34,8 @@ def validate_svg(svg_content: str) -> tuple[bool, str]:
     # if width != "512" or height != "512":
     #     return False, f"Invalid dimensions: {width}x{height}. Must be 512x512."
 
-    # 3. Disallowed tags
-    forbidden_tags = {'script', 'foreignObject', 'image', 'text', 'linearGradient', 'radialGradient', 'filter'}
+    # 3. Disallowed tags (removed gradients and filters to allow high-quality SVGs)
+    forbidden_tags = {'script', 'foreignObject', 'image', 'text'}
     for elem in root.iter():
         tag = elem.tag
         # remove namespace if present for checking

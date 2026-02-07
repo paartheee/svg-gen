@@ -1,15 +1,16 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from app.models.schemas import SvgResponse
 from app.core.config import settings
-from app.core.prompts import SYSTEM_PROMPT_GENERATE
-from app.core.gemini_client import call_gemini
-from app.core.svg_guard import clean_svg_code, validate_svg
+from app.core.prompts import SYSTEM_PROMPT_GENERATE, USE_CASE_HINTS, get_generate_prompt
+from app.core.svg_pipeline import generate_valid_svg_with_retry
 
 router = APIRouter()
+VALID_USE_CASES = set(USE_CASE_HINTS.keys())
 
 @router.post("/generate", response_model=SvgResponse)
 async def generate_svg(
     prompt: str = Form(...),
+    use_case: str = Form("icon"),
     image: UploadFile | None = File(None),
 ):
     """
@@ -17,6 +18,12 @@ async def generate_svg(
     Optionally accepts a reference image to guide generation.
     """
     try:
+        if use_case not in VALID_USE_CASES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid use_case. Must be one of: {', '.join(sorted(VALID_USE_CASES))}",
+            )
+
         image_bytes = None
         image_mime = None
         if image is not None:
@@ -31,38 +38,29 @@ async def generate_svg(
                 raise HTTPException(status_code=400, detail="Reference image is empty.")
             image_mime = image.content_type
 
-        prompt_text = f"Generate an SVG for this intent: {prompt}"
-        if image_bytes:
-            prompt_text = (
-                "Use the provided image as a visual reference for layout, shapes, and overall style. "
-                + prompt_text
-            )
+        prompt_text = get_generate_prompt(
+            intent=prompt,
+            use_case=use_case,
+            has_reference_image=bool(image_bytes),
+        )
 
-        # 1. Call LLM
-        raw_response = await call_gemini(
-            model_name=settings.GEMINI_FLASH_MODEL,
+        svg_code = await generate_valid_svg_with_retry(
+            model_name=settings.GEMINI_PRO_MODEL,
             system_instruction=SYSTEM_PROMPT_GENERATE,
             prompt=prompt_text,
             image_bytes=image_bytes,
             image_mime=image_mime,
+            retry_count=1,
+            task_hint=f"Use-case: {use_case}. Intent: {prompt}",
         )
-        
-        # 2. Extract SVG
-        svg_code = clean_svg_code(raw_response)
-        
-        # 3. Validate
-        is_valid, message = validate_svg(svg_code)
-        if not is_valid:
-            # In a real app, we might retry or return an error. 
-            # For now, we return it but mark status? Or just error.
-            # Let's error to be safe as per "SVG INVARIANTS (MUST ALWAYS HOLD)"
-            raise HTTPException(status_code=422, detail=f"Generated SVG invalid: {message}")
 
         return SvgResponse(
             svg_code=svg_code,
-            model_used=settings.GEMINI_FLASH_MODEL,
+            model_used=settings.GEMINI_PRO_MODEL,
             status="success"
         )
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
